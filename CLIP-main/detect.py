@@ -83,6 +83,6 @@ def CLIP_demo():
     plt.show()
 
 if __name__ == '__main__':
-    # class_demo1()
-    CLIP_demo()
-    class_demo2()
+    class_demo1()
+    # CLIP_demo()
+    # class_demo2()
