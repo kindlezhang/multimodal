@@ -254,21 +254,23 @@ class CLIP(nn.Module):
     def __init__(self,
                  embed_dim: int,
                  # vision
-                 image_resolution: int,
-                 vision_layers: Union[Tuple[int, int, int, int], int],
-                 vision_width: int,
-                 vision_patch_size: int,
+                 image_resolution: int, # 512
+                 vision_layers: Union[Tuple[int, int, int, int], int], # 12
+                 vision_width: int, # 768
+                 vision_patch_size: int,  # 32
                  # text
-                 context_length: int,
-                 vocab_size: int,
-                 transformer_width: int,
-                 transformer_heads: int,
-                 transformer_layers: int
+                 context_length: int, # 77
+                 vocab_size: int, # 49408
+                 transformer_width: int, # 512
+                 transformer_heads: int, # 8
+                 transformer_layers: int # 12
                  ):
         super().__init__()
 
         self.context_length = context_length  # 77
 
+
+        # 判断vision_layers是不是一个元组或者列表
         if isinstance(vision_layers, (tuple, list)):
             vision_heads = vision_width * 32 // 64
             self.visual = ModifiedResNet(
@@ -279,6 +281,7 @@ class CLIP(nn.Module):
                 width=vision_width
             )
         else:
+            # 自动计算heads数量
             vision_heads = vision_width // 64
             self.visual = VisionTransformer(
                 input_resolution=image_resolution,
@@ -289,6 +292,7 @@ class CLIP(nn.Module):
                 output_dim=embed_dim
             )
 
+        # 文本编码器为transformer
         self.transformer = Transformer(
             width=transformer_width,
             layers=transformer_layers,
@@ -454,12 +458,15 @@ def build_model(state_dict: dict):
 
 
 if __name__ == '__main__':
-    embed_dim = 512
+    
     image_resolution = 224
-    vision_layers = 12
-    vision_width = 768
+    vision_layers = 12 
+    vision_width = 768 # vit中
     vision_patch_size = 32
-    context_length = 77
+
+
+    embed_dim = 512 # transformer的嵌入维度
+    context_length = 77 # 文本最大长度，不够会填充，多出来的会截取
     vocab_size = 49408
     transformer_width = 512
     transformer_heads = 8
