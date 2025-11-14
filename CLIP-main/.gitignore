@@ -12,3 +12,5 @@ thumbs.db
 *.pth
 *.pt
 *.h5
+
+/data/master.csv
