@@ -19,3 +19,20 @@ batch token 嵌入维度 也是3维
 
 之后，适用于下游任务：比如，将所有的词放入一个句子，再放入text encoder，再放入一个图片，
 做zero-shot，找到和图片匹配度最高的token（训练的话，需要告诉系统正确的token是什么）
+
+
+The image shows both lung fields with clear markings.
+
+No obvious focal consolidation or mass is observed.
+
+The heart and mediastinal contours appear normal.
+
+There is no evidence of pleural effusion or pneumothorax.
+
+The diaphragm and costophrenic angles are sharp.
+
+The trachea is midline, without deviation.
+
+
+
+a healthy lung image, a abnormal lung image

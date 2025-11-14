@@ -92,9 +92,10 @@ if __name__ == '__main__':
     # ======== 初始化模型 ========
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model, preprocess = clip.load("ViT-B/32", device=device, jit=False)
-    # ckpt = torch.load("./CLIP-main/checkpoints/clip_med_epoch5.pt", map_location=device)
-    # model.load_state_dict(ckpt["model_state"])
-    # model.eval()
+    # ckpt = torch.load("./CLIP-main/checkpoints/clip_med_epoch5_new.pt", map_location=device)
+    ckpt = torch.load("./CLIP-main/checkpoints/clip_med_epoch5_with_impression.pt", map_location=device)
+    model.load_state_dict(ckpt["model_state"])
+    model.eval()
 
     print("we good.")
 
@@ -109,13 +110,13 @@ if __name__ == '__main__':
         text_language = [desc.strip() for desc in text_input.split(',')]
 
         if not text_language:
-            print("❌ 未输入任何文本，请重新输入。")
+            print("未输入任何文本，请重新输入。")
             continue
         
         try:
             image = preprocess(Image.open(image_path)).unsqueeze(0).to(device)
         except Exception as e:
-            print(f"❌ 无法打开图片: {e}")
+            print(f"无法打开图片: {e}")
             continue
 
         text = clip.tokenize(text_language).to(device)

@@ -14,7 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 from clip import clip  # openai/CLIP
 
 # ---------- Config ----------
-CSV_PATH = "./CLIP-main/data/train.csv"   # image_path, report
+CSV_PATH = "./CLIP-main/data/master.csv"   # image_path, report
 IMAGE_ROOT = "/Users/kindle/Desktop/file/project/LLM-with-mixed-type-data/data/raw/mimic-cxr-jpg/"       # if your csv has relative paths, set root
 MODEL_NAME = "ViT-B/32"       # or "ViT-B/16"
 DEVICE = "cuda" if torch.cuda.is_available() else ("mps" if torch.backends.mps.is_available() else "cpu")
@@ -26,6 +26,7 @@ LOGIT_SCALE_INIT = 100.0      # common initial scale
 SAVE_DIR = "./CLIP-main/checkpoints"
 NUM_WORKERS = 0
 FREEZE_CLIP = False      # True: freeze backbone, only tune small heads. False: tune full CLIP
+finetune_name = "with_impression"
 # ----------------------------
 
 os.makedirs(SAVE_DIR, exist_ok=True)
@@ -37,7 +38,7 @@ class ImageTextDataset(Dataset):
     def __init__(self, csv_path, preprocess, image_root=""):
         df = pd.read_csv(
             csv_path,
-            usecols=[0, 1], 
+            usecols=[0, 5], 
             header=None,
             names=["image", "text"],
             dtype={"image": str, "text": str},  # 强制为字符串
@@ -75,12 +76,44 @@ class ImageTextDataset(Dataset):
         text = str(row['text'])
         return image, text
 
+def clip_safe_tokenize(texts, device=None):
+    """
+    对单条或多条文本进行 CLIP tokenization，并自动截断到 77 token。
+    """
+    if isinstance(texts, str):
+        texts = [texts]
+    tokens = clip.tokenize(texts, truncate=True)  # 自动截断
+    if device is not None:
+        tokens = tokens.to(device)
+    return tokens
+
+# -------- Safe text truncation for CLIP --------
+def clip_truncate(text, max_tokens=75):
+    """
+    Ensure text will have <= max_tokens after tokenization.
+    """
+    # 1. quick character truncation (fast)
+    if len(text) > 300:
+        text = text[:300]
+
+    # 2. word truncation
+    words = text.split()
+    if len(words) > 60:
+        words = words[:60]
+        text = " ".join(words)
+
+    return text
+
 # ---------- Collate (tokenize texts in batch) ----------
 def collate_fn(batch):
     images, texts = zip(*batch)
     images = torch.stack(images, dim=0)
+
+    # apply safe truncation
+    texts = [clip_truncate(t) for t in texts]
+
     # tokenize later on device
-    return images, list(texts)
+    return images, texts
 
 # ---------- Load model ----------
 model, preprocess = clip.load(MODEL_NAME, device=DEVICE, jit=False)  # non-jit for training
@@ -125,13 +158,14 @@ def train_one_epoch(epoch):
         # move images
         images = images.to(DEVICE)
         # tokenize texts on device
-        text_tokens = clip.tokenize(texts).to(DEVICE)  # shape [B, 77]
+        # text_tokens = clip.tokenize(texts).to(DEVICE)  # shape [B, 77]
+        text_tokens = clip_safe_tokenize(texts, DEVICE)
         # forward
         image_features = model.encode_image(images).float()   # [B, D]
         text_features = model.encode_text(text_tokens).float() # [B, D]
         
-        print("Image features dtype:", image_features.dtype)
-        print("Text features dtype:", text_features.dtype)
+        # print("Image features dtype:", image_features.dtype)
+        # print("Text features dtype:", text_features.dtype)
 
         # normalize
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
@@ -139,20 +173,20 @@ def train_one_epoch(epoch):
 
         # logits (image x text^T) scaled by logit_scale
         logit_scale = model.logit_scale.exp().float()
-        print("Logit scale dtype:", logit_scale.dtype)
+        # print("Logit scale dtype:", logit_scale.dtype)
 
         logits_per_image = logit_scale * image_features @ text_features.t().float() # [B, B]
-        print("Logits dtype:", logits_per_image.dtype)
+        # print("Logits dtype:", logits_per_image.dtype)
 
         logits_per_text = logits_per_image.t()
 
         labels = torch.arange(len(images), device=DEVICE).long()
-        print("Labels dtype:", labels.dtype)
+        # print("Labels dtype:", labels.dtype)
 
         loss_i = F.cross_entropy(logits_per_image, labels)
         loss_t = F.cross_entropy(logits_per_text, labels)
         loss = (loss_i + loss_t) / 2
-        print("Loss dtype:", loss.dtype)
+        # print("Loss dtype:", loss.dtype)
 
         optimizer.zero_grad()
         loss.backward()
@@ -171,7 +205,7 @@ def compute_inbatch_recall():
     all_r1 = []
     for images, texts in dataloader:
         images = images.to(DEVICE)
-        text_tokens = clip.tokenize(texts).to(DEVICE)
+        text_tokens = clip_safe_tokenize(texts, DEVICE)
         image_features = model.encode_image(images)
         text_features = model.encode_text(text_tokens)
         image_features = image_features / image_features.norm(dim=-1, keepdim=True)
@@ -188,6 +222,8 @@ def compute_inbatch_recall():
 
 if __name__ == "__main__":
 
+
+
     best_loss = 1e9
     for epoch in range(EPOCHS):
         avg_loss = train_one_epoch(epoch)
@@ -199,6 +235,6 @@ if __name__ == "__main__":
             "model_state": model.state_dict(),
             "optimizer_state": optimizer.state_dict()
         }
-        torch.save(ckpt, os.path.join(SAVE_DIR, f"clip_med_epoch{epoch+1}.pt"))
+        torch.save(ckpt, os.path.join(SAVE_DIR, f"clip_med_epoch{epoch+1}_{finetune_name}.pt"))
 
     
